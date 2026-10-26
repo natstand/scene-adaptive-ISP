@@ -1,0 +1,13 @@
+Adaptation-only PFV4 reviewer package
+
+run_adaptation.py             one-command video3 adaptation and five-frame renderer
+run/train_single.py    default scene adaptation entry point
+run/render_frames.py   checkpoint-based RAW frame renderer
+run/summary.py         renderer grid helpers
+run/full4_denoiser.py  frozen Full4 inference model and checkpoint loader
+run/*.py               ISP, RAW, alignment, loss, metric, and stage helpers
+run/checkpoints/*.pth  bundled frozen Full4 step_050000 denoiser checkpoint
+example/video3/                adaptation frame and five selected video frames
+example/video30/               pre-cropped adaptation frame and five selected video frames
+
+

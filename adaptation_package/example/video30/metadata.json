@@ -1,0 +1,24 @@
+{
+  "source": "PFV4/video_30/6000",
+  "raw_file": "render_input/raw/6000000001.raww",
+  "frame": 1,
+  "width": 568,
+  "height": 384,
+  "bit_depth": 12,
+  "effective_side": "Lower",
+  "exposure_us": 164.9,
+  "frame_rate": 6000.0,
+  "bayer_pattern": "GBRG",
+  "phone_reference": "phone.jpg",
+  "built_in_reference": "render_input/built_in/built_in_000001.jpg",
+  "render_raw_dir": "render_input/raw",
+  "render_built_in_dir": "render_input/built_in",
+  "render_source_total_frames": 4001,
+  "render_frame_numbers": [
+    1,
+    226,
+    451,
+    675,
+    900
+  ]
+}

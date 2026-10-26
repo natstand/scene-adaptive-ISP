@@ -1,0 +1,18 @@
+{
+  "source": "PFV4/video_3/raw",
+  "raw_file": "raw000001.raww",
+  "frame": 1,
+  "width": 512,
+  "height": 512,
+  "bit_depth": 12,
+  "effective_side": "Lower",
+  "exposure_us": 18.2,
+  "frame_rate": 50000.0,
+  "bayer_pattern": "GBRG",
+  "phone_reference": "phone.jpg",
+  "built_in_reference": "built_in.jpg",
+  "render_raw_dir": "render_input/raw",
+  "render_built_in_dir": "render_input/built_in",
+  "render_source_total_frames": 6285,
+  "render_frame_numbers": [1, 700, 3143, 4714, 6285]
+}
