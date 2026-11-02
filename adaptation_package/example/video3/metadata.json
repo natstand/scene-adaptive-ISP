@@ -36,6 +36,6 @@
     0,
     512,
     512
-  ],
-  "coordinate_note": "The bundled RAW is already the 512x512 acquisition ROI. No additional display crop is applied."
+  ]
+ 
 }
