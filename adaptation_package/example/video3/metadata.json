@@ -14,5 +14,28 @@
   "render_raw_dir": "render_input/raw",
   "render_built_in_dir": "render_input/built_in",
   "render_source_total_frames": 6285,
-  "render_frame_numbers": [1, 700, 3143, 4714, 6285]
+  "render_frame_numbers": [
+    1,
+    700,
+    3143,
+    4714,
+    6285
+  ],
+  "sensor_roi_xywh": [
+    256,
+    256,
+    512,
+    512
+  ],
+  "input_roi_origin_in_sensor_xy": [
+    256,
+    256
+  ],
+  "input_roi_xywh_in_source": [
+    0,
+    0,
+    512,
+    512
+  ],
+  "coordinate_note": "The bundled RAW is already the 512x512 acquisition ROI. No additional display crop is applied."
 }
