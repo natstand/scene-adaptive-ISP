@@ -11,9 +11,6 @@ import torch.nn.functional as F
 
 @dataclass(frozen=True)
 class Full4DenoiserConfig:
-    # Descriptive name for new configs. Older checkpoints keep their original
-    # name in the serialized config and remain loadable because unknown config
-    # fields are ignored by the loader below.
     model_name: str = "full4_denoiser_logres_v1"
     in_ch: int = 4
     base: int = 25
