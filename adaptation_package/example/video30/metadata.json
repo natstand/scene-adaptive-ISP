@@ -20,5 +20,28 @@
     451,
     675,
     900
-  ]
+  ],
+  "sensor_roi_xywh": [
+    128,
+    128,
+    768,
+    768
+  ],
+  "input_roi_origin_in_sensor_xy": [
+    282,
+    462
+  ],
+  "input_roi_xywh_in_source": [
+    154,
+    334,
+    568,
+    384
+  ],
+  "display_crop_xywh_in_source": [
+    154,
+    334,
+    568,
+    384
+  ],
+  
 }
