@@ -33,7 +33,7 @@ from .common import (
 )
 from .defaults import DEFAULT_CONFIG
 from .full4_denoiser import build_full4_denoiser_from_checkpoint
-from .isp import InitISPNet, init_exposure_wb_base, init_from_unaligned_phone, optimize_init_net
+from .isp import InitISPNet, init_exposure_wb_base, init_from_unaligned_phone, optimize_init_net, pack_bayer_tensor
 from .isp_scene_adaptive_ltm import ResidualISPV4SceneAdaptiveLTM as ResidualISPV4
 from .losses import build_loss_static_cache, total_loss_residual_v4
 from .metadata import read_cihx_metadata
@@ -80,6 +80,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Optional ISP checkpoint used to initialize scene adaptation.",
     )
     p.add_argument("--cihx", type=str, default="")
+    p.add_argument("--metadata_json", type=str, default="", help="Example metadata containing the parent ROI and crop origin for denoiser coordinates.")
     p.add_argument("--fixed_aligned_phone", type=str, default="")
     p.add_argument("--fixed_valid_mask", type=str, default="")
     p.add_argument("--save_isp_ckpt", type=str, default="")
@@ -240,6 +241,25 @@ def _apply_cihx_metadata(args) -> dict:
         "exposure_us": float(meta["exposure_us"]),
         "frame_rate": meta.get("frame_rate"),
     }
+
+def _metadata_relative_coords(args, raw_packed: torch.Tensor):
+    if not str(args.metadata_json).strip():
+        return None
+    meta = json.loads(Path(args.metadata_json).expanduser().read_text())
+    crop = meta.get("input_roi_xywh_in_source")
+    parent = meta.get("sensor_roi_xywh")
+    if not crop or not parent:
+        return None
+    # Coordinates are defined in packed-RAW units; the metadata boxes are full-resolution pixels.
+    x, y, _, _ = [float(v) for v in crop]
+    _, _, pw, ph = [float(v) for v in parent]
+    h, w = raw_packed.shape[-2:]
+    ch, cw = h // 4, w // 4
+    stride = 4.0
+    yy, xx = torch.meshgrid(torch.arange(ch, device=raw_packed.device, dtype=raw_packed.dtype), torch.arange(cw, device=raw_packed.device, dtype=raw_packed.dtype), indexing="ij")
+    # Parent ROI coordinates are converted from full-res Bayer pixels to packed-RAW pixels.
+    grid = torch.stack(((x / 2.0 + (xx + 0.5) * stride) / (pw / 2.0) * 2 - 1, (y / 2.0 + (yy + 0.5) * stride) / (ph / 2.0) * 2 - 1), dim=-1)
+    return grid.unsqueeze(0)
 
 
 def _trace_vectors(isp: ResidualISPV4):
@@ -447,6 +467,9 @@ def train_single(args) -> int:
     ).to(device)
     phone = load_rgb(args.phone_rgb).to(device)
     exposure_t = torch.tensor(args.exposure_t, dtype=torch.float32, device=device)
+    relative_coords = _metadata_relative_coords(args, pack_bayer_tensor(raw, pattern=args.pattern))
+    if relative_coords is not None:
+        print(f"[denoiser-coordinates] metadata={args.metadata_json} shape={tuple(relative_coords.shape)}", flush=True)
 
     den_exp_min_log2 = math.log2(args.denoiser_condition_min_us + 1e-12)
     den_exp_max_log2 = math.log2(args.denoiser_condition_max_us + 1e-12)
@@ -485,6 +508,7 @@ def train_single(args) -> int:
         ltm_fixed_blend_strength=args.ltm_fixed_blend_strength,
         gtm_luminance_only=gtm_luminance_only,
         ltm_luminance_only=ltm_luminance_only,
+        relative_coords=relative_coords,
     ).to(device)
     _apply_scene_adaptive_ltm_init(isp, args.scene_adaptive_ltm_init)
 

@@ -138,6 +138,7 @@ def main() -> int:
         "--hs_raw", str(raw), "--raw_h", str(metadata["height"]),
         "--raw_w", str(metadata["width"]), "--exposure_t", str(metadata["exposure_us"]),
         "--phone_rgb", str(phone), "--denoiser_ckpt", str(denoiser),
+        "--metadata_json", str(example_dir / "metadata.json"),
         "--device", str(args.device), "--out_dir", str(out_dir),
         "--out", str(out_dir / "predicted_rgb.png"),
         "--save_isp_ckpt", str(out_dir / "isp_checkpoint.pth"),

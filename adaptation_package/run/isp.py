@@ -328,11 +328,12 @@ def range_stats(x: torch.Tensor):
 
 
 class ResidualISPV4(nn.Module):
-    def __init__(self, pattern="RGGB", ccm_clamp_abs=2.0, lut_size=24, use_lut=True, lut_black_anchor=True, lut_near_black_fade=True, lut_near_black_low=0.030, lut_near_black_high=0.150, raw_denoiser=None, denoiser_exp_min_log2=None, denoiser_exp_max_log2=None, use_raw_denoiser=True, use_denoiser_clean_prior=True, use_denoiser_uncertainty=True, uncertainty_confidence_mode="reliability", uncertainty_temperature=4.0, ltm_noise_aware=True, ltm_reliability_power=1.0, ltm_structure_power=1.0, ltm_highlight_guard=0.5, ltm_min_gate=0.20, gtm_luminance_only=False, ltm_luminance_only=False):
+    def __init__(self, pattern="RGGB", ccm_clamp_abs=2.0, lut_size=24, use_lut=True, lut_black_anchor=True, lut_near_black_fade=True, lut_near_black_low=0.030, lut_near_black_high=0.150, raw_denoiser=None, denoiser_exp_min_log2=None, denoiser_exp_max_log2=None, use_raw_denoiser=True, use_denoiser_clean_prior=True, use_denoiser_uncertainty=True, uncertainty_confidence_mode="reliability", uncertainty_temperature=4.0, ltm_noise_aware=True, ltm_reliability_power=1.0, ltm_structure_power=1.0, ltm_highlight_guard=0.5, ltm_min_gate=0.20, gtm_luminance_only=False, ltm_luminance_only=False, relative_coords=None):
         super().__init__()
         self.pattern = pattern
         self.ccm_clamp_abs = float(ccm_clamp_abs)
         self.raw_denoiser = raw_denoiser
+        self.relative_coords = relative_coords
         self.use_raw_denoiser = bool(use_raw_denoiser and raw_denoiser is not None)
         self.use_denoiser_clean_prior = bool(use_denoiser_clean_prior and self.use_raw_denoiser)
         self.use_denoiser_uncertainty = bool(use_denoiser_uncertainty and self.use_raw_denoiser)
@@ -532,7 +533,7 @@ class ResidualISPV4(nn.Module):
             zero = torch.zeros_like(raw_packed); one = torch.ones_like(raw_packed)
             return {"clean": raw_packed, "log_var": zero, "variance": zero, "sigma": zero, "phys_var": zero, "relative_noise": zero, "reliability": one, "local_signal": raw_packed.clamp_min(1 / 4095.0), "residual": zero}
         cond = make_condition_tensor(exp_t, self.denoiser_exp_min_log2, self.denoiser_exp_max_log2, device=raw_packed.device, dtype=raw_packed.dtype)
-        den = complete_denoiser_output(self.raw_denoiser(raw_packed, cond))
+        den = complete_denoiser_output(self.raw_denoiser(raw_packed, cond, relative_coords=self.relative_coords))
         if "relative_noise" not in den or "reliability" not in den:
             local_signal = F.avg_pool2d(F.pad(den["clean"].detach().clamp(0, 1), (4, 4, 4, 4), mode="reflect"), 9, stride=1).clamp_min(1 / 4095.0)
             relative_noise = (den["sigma"] / local_signal).clamp(0, 100)

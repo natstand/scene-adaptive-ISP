@@ -11,6 +11,9 @@ import torch.nn.functional as F
 
 @dataclass(frozen=True)
 class Full4DenoiserConfig:
+    # Descriptive name for new configs. Older checkpoints keep their original
+    # name in the serialized config and remain loadable because unknown config
+    # fields are ignored by the loader below.
     model_name: str = "full4_denoiser_logres_v1"
     in_ch: int = 4
     base: int = 25
@@ -216,8 +219,8 @@ class Full4DenoiserAdapter(nn.Module):
         for parameter in self.parameters():
             parameter.requires_grad_(enabled)
 
-    def forward(self, raw4: torch.Tensor, _condition: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
-        out = self.core(raw4)
+    def forward(self, raw4: torch.Tensor, _condition: torch.Tensor | None = None, relative_coords: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+        out = self.core(raw4, relative_coords=relative_coords)
         clean = out["denoised_raw"].clamp(0, 1)
         variance = out["noise_variance"].clamp_min(self.min_variance)
         return {
