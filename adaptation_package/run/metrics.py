@@ -19,43 +19,85 @@ def _masked_pixels_chw(x: torch.Tensor, mask: torch.Tensor, max_samples=200000):
     return x.permute(0, 2, 3, 1).reshape(-1, 3)[idx]
 
 
+@torch.no_grad()
 def ciede2000_lab(lab1: torch.Tensor, lab2: torch.Tensor) -> torch.Tensor:
-    """CIEDE2000 color difference for tensors shaped [N,3] in Lab."""
-    L1, a1, b1 = lab1[:, 0], lab1[:, 1], lab1[:, 2]
-    L2, a2, b2 = lab2[:, 0], lab2[:, 1], lab2[:, 2]
-    C1 = torch.sqrt(a1 * a1 + b1 * b1 + 1e-12)
-    C2 = torch.sqrt(a2 * a2 + b2 * b2 + 1e-12)
-    Cbar = 0.5 * (C1 + C2)
-    G = 0.5 * (1.0 - torch.sqrt(Cbar.pow(6) / (Cbar.pow(6) + 25.0 ** 6 + 1e-12)))
+    """Compute CIEDE2000 for pairs of CIELAB colors. [N, 3] -> [N]."""
+    if lab1.ndim != 2 or lab1.shape[1] != 3 or lab1.shape != lab2.shape:
+        raise ValueError("lab1 and lab2 must both have shape [N, 3].")
+    if lab1.device != lab2.device:
+        raise ValueError("lab1 and lab2 must be on the same device.")
+
+    # Use float64 for evaluation, especially near the 180-degree hue boundary.
+    L1, a1, b1 = lab1.double().unbind(dim=1)
+    L2, a2, b2 = lab2.double().unbind(dim=1)
+
+    def chroma_factor(c):
+        r = (c / 25.0).pow(7)
+        return torch.sqrt(r / (1.0 + r))
+
+    # Adjust the a* coordinate for the mean chroma of the pair.
+    C1 = torch.hypot(a1, b1)
+    C2 = torch.hypot(a2, b2)
+    G = 0.5 * (1.0 - chroma_factor((C1 + C2) / 2.0))
     a1p = (1.0 + G) * a1
     a2p = (1.0 + G) * a2
-    C1p = torch.sqrt(a1p * a1p + b1 * b1 + 1e-12)
-    C2p = torch.sqrt(a2p * a2p + b2 * b2 + 1e-12)
-    h1p = torch.remainder(torch.atan2(b1, a1p) * 180.0 / math.pi, 360.0)
-    h2p = torch.remainder(torch.atan2(b2, a2p) * 180.0 / math.pi, 360.0)
-    dLp = L2 - L1
-    dCp = C2p - C1p
+
+    C1p = torch.hypot(a1p, b1)
+    C2p = torch.hypot(a2p, b2)
+    neutral = (C1p == 0) | (C2p == 0)
+
+    def hue_deg(a, b, chroma):
+        h = torch.rad2deg(torch.atan2(b, a)).remainder(360.0)
+        return torch.where(chroma == 0, 0.0, h)
+
+    h1p = hue_deg(a1p, b1, C1p)
+    h2p = hue_deg(a2p, b2, C2p)
+
+    # Lightness, chroma, and hue differences.
+    dL = L2 - L1
+    dC = C2p - C1p
     dh = h2p - h1p
-    dhp = torch.where((C1p * C2p) <= 1e-12, torch.zeros_like(dh), dh)
-    dhp = torch.where(dhp > 180.0, dhp - 360.0, dhp)
-    dhp = torch.where(dhp < -180.0, dhp + 360.0, dhp)
-    dHp = 2.0 * torch.sqrt(C1p * C2p + 1e-12) * torch.sin((dhp * math.pi / 180.0) / 2.0)
-    Lbarp = 0.5 * (L1 + L2)
-    Cbarp = 0.5 * (C1p + C2p)
+    # Keep the standard |dh| <= 180 branch at a numerical tie.
+    crosses_180 = dh.abs() > 180.0 + 1e-12
+    dh_short = torch.where(crosses_180, dh - 360.0 * dh.sign(), dh)
+    dh_short = torch.where(neutral, 0.0, dh_short)
+    dH = 2.0 * torch.sqrt(C1p * C2p) * torch.sin(torch.deg2rad(dh_short / 2.0))
+
+    # Mean lightness, chroma, and hue.
+    Lbar = (L1 + L2) / 2.0
+    Cbar = (C1p + C2p) / 2.0
     hsum = h1p + h2p
-    hdiff = (h1p - h2p).abs()
-    hbarp = torch.where((C1p * C2p) <= 1e-12, hsum, 0.5 * hsum)
-    hbarp = torch.where(((C1p * C2p) > 1e-12) & (hdiff > 180.0) & (hsum < 360.0), 0.5 * (hsum + 360.0), hbarp)
-    hbarp = torch.where(((C1p * C2p) > 1e-12) & (hdiff > 180.0) & (hsum >= 360.0), 0.5 * (hsum - 360.0), hbarp)
-    hp = hbarp * math.pi / 180.0
-    T = 1.0 - 0.17 * torch.cos(hp - 30.0 * math.pi / 180.0) + 0.24 * torch.cos(2.0 * hp) + 0.32 * torch.cos(3.0 * hp + 6.0 * math.pi / 180.0) - 0.20 * torch.cos(4.0 * hp - 63.0 * math.pi / 180.0)
-    dtheta = 30.0 * torch.exp(-((hbarp - 275.0) / 25.0).pow(2))
-    Rc = 2.0 * torch.sqrt(Cbarp.pow(6) / (Cbarp.pow(6) + 25.0 ** 6 + 1e-12))
-    Sl = 1.0 + 0.015 * (Lbarp - 50.0).pow(2) / torch.sqrt(20.0 + (Lbarp - 50.0).pow(2))
-    Sc = 1.0 + 0.045 * Cbarp
-    Sh = 1.0 + 0.015 * Cbarp * T
-    Rt = -torch.sin(2.0 * dtheta * math.pi / 180.0) * Rc
-    return torch.sqrt((dLp / Sl).pow(2) + (dCp / Sc).pow(2) + (dHp / Sh).pow(2) + Rt * (dCp / Sc) * (dHp / Sh) + 1e-12)
+    hbar = hsum / 2.0
+    hbar = torch.where(
+        crosses_180,
+        hbar + torch.where(hsum < 360.0, 180.0, -180.0),
+        hbar,
+    )
+    hbar = torch.where(neutral, hsum, hbar)
+
+    # Weighting functions and the blue-region rotation term.
+    def cos_deg(x):
+        return torch.cos(torch.deg2rad(x))
+
+    T = (
+        1.0
+        - 0.17 * cos_deg(hbar - 30.0)
+        + 0.24 * cos_deg(2.0 * hbar)
+        + 0.32 * cos_deg(3.0 * hbar + 6.0)
+        - 0.20 * cos_deg(4.0 * hbar - 63.0)
+    )
+    l2 = (Lbar - 50.0).square()
+    SL = 1.0 + 0.015 * l2 / torch.sqrt(20.0 + l2)
+    SC = 1.0 + 0.045 * Cbar
+    SH = 1.0 + 0.015 * Cbar * T
+
+    theta = 30.0 * torch.exp(-((hbar - 275.0) / 25.0).square())
+    RC = 2.0 * chroma_factor(Cbar)
+    RT = -RC * torch.sin(torch.deg2rad(2.0 * theta))
+
+    dl, dc, dh = dL / SL, dC / SC, dH / SH
+    de2 = dl.square() + dc.square() + dh.square() + RT * dc * dh
+    return de2.clamp_min(0.0).sqrt()
 
 
 def compute_hue_error_metrics(pred: torch.Tensor, tgt: torch.Tensor, mask: torch.Tensor, chroma_min: float = 3.0):
